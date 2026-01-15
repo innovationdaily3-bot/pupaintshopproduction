@@ -1,0 +1,802 @@
+<!doctype html>
+<html lang="en">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Production Dashboard</title>
+  <script src="/_sdk/data_sdk.js"></script>
+  <script src="/_sdk/element_sdk.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    body {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #1a202c;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    .dashboard-container {
+      width: 100%;
+      height: 100%;
+      overflow-auto;
+      padding: 2rem;
+    }
+
+    .header {
+      background: white;
+      border-radius: 1rem;
+      padding: 1.5rem 2rem;
+      margin-bottom: 2rem;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .header h1 {
+      margin: 0 0 0.5rem 0;
+      font-size: 2rem;
+      font-weight: 700;
+      color: #667eea;
+    }
+
+    .header p {
+      margin: 0;
+      color: #718096;
+      font-size: 1rem;
+    }
+
+    .action-bar {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      padding: 0.75rem 1.5rem;
+      border: none;
+      border-radius: 0.5rem;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .btn-primary {
+      background: #667eea;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #5568d3;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+    }
+
+    .btn-secondary {
+      background: #48bb78;
+      color: white;
+    }
+
+    .btn-secondary:hover {
+      background: #38a169;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(72, 187, 120, 0.3);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .stat-card {
+      background: white;
+      border-radius: 1rem;
+      padding: 1.5rem;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .stat-card h3 {
+      margin: 0 0 0.5rem 0;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #718096;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .stat-card .value {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #667eea;
+      margin: 0;
+    }
+
+    .chart-container {
+      background: white;
+      border-radius: 1rem;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .chart-container h2 {
+      margin: 0 0 1.5rem 0;
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #1a202c;
+    }
+
+    .data-table-container {
+      background: white;
+      border-radius: 1rem;
+      padding: 1.5rem;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      overflow-x: auto;
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+
+    .data-table th {
+      background: #f7fafc;
+      padding: 0.75rem;
+      text-align: left;
+      font-weight: 600;
+      color: #4a5568;
+      border-bottom: 2px solid #e2e8f0;
+      white-space: nowrap;
+    }
+
+    .data-table td {
+      padding: 0.75rem;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .data-table tr:hover {
+      background: #f7fafc;
+    }
+
+    .delete-btn {
+      padding: 0.375rem 0.75rem;
+      background: #fc8181;
+      color: white;
+      border: none;
+      border-radius: 0.375rem;
+      cursor: pointer;
+      font-size: 0.875rem;
+      transition: background 0.2s;
+    }
+
+    .delete-btn:hover {
+      background: #f56565;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      overflow-y: auto;
+    }
+
+    .modal.active {
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    .modal-content {
+      background: white;
+      border-radius: 1rem;
+      padding: 2rem;
+      width: 100%;
+      max-width: 900px;
+      margin: auto;
+      box-shadow: 0 20px 25px rgba(0, 0, 0, 0.15);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .modal-header h2 {
+      margin: 0;
+      font-size: 1.5rem;
+      color: #1a202c;
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      font-size: 1.5rem;
+      cursor: pointer;
+      color: #718096;
+      padding: 0;
+      width: 2rem;
+      height: 2rem;
+    }
+
+    .close-btn:hover {
+      color: #1a202c;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .form-group label {
+      margin-bottom: 0.375rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #4a5568;
+    }
+
+    .form-group input,
+    .form-group select {
+      padding: 0.625rem;
+      border: 1px solid #e2e8f0;
+      border-radius: 0.375rem;
+      font-size: 0.875rem;
+      transition: border-color 0.2s;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    .form-actions {
+      display: flex;
+      gap: 1rem;
+      justify-content: flex-end;
+      margin-top: 1.5rem;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 3rem;
+      color: #718096;
+    }
+
+    .empty-state h3 {
+      font-size: 1.25rem;
+      margin: 0 0 0.5rem 0;
+    }
+
+    .loading {
+      display: inline-block;
+      width: 1rem;
+      height: 1rem;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top-color: white;
+      animation: spin 0.6s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      background: #48bb78;
+      color: white;
+      padding: 1rem 1.5rem;
+      border-radius: 0.5rem;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      display: none;
+      z-index: 2000;
+    }
+
+    .toast.show {
+      display: block;
+      animation: slideIn 0.3s ease-out;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+  </style>
+  <style>@view-transition { navigation: auto; }</style>
+  <script src="https://cdn.tailwindcss.com" type="text/javascript"></script>
+ </head>
+ <body>
+  <div class="dashboard-container">
+   <div class="header">
+    <h1 id="dashboardTitle">Production Dashboard</h1>
+    <p id="companyName">Manufacturing Analytics</p>
+   </div>
+   <div class="action-bar"><button class="btn btn-primary" id="addDataBtn"> <span>➕</span> Add Production Data </button> <button class="btn btn-secondary" id="downloadBtn"> <span>📥</span> Download Excel </button>
+   </div>
+   <div class="stats-grid">
+    <div class="stat-card">
+     <h3>Total Records</h3>
+     <p class="value" id="totalRecords">0</p>
+    </div>
+    <div class="stat-card">
+     <h3>Total OK Qty</h3>
+     <p class="value" id="totalOkQty">0</p>
+    </div>
+    <div class="stat-card">
+     <h3>Total Rework</h3>
+     <p class="value" id="totalRework">0</p>
+    </div>
+    <div class="stat-card">
+     <h3>Avg Rework %</h3>
+     <p class="value" id="avgRework">0%</p>
+    </div>
+   </div>
+   <div class="chart-container">
+    <h2>Production Overview</h2>
+    <canvas id="productionChart"></canvas>
+   </div>
+   <div class="chart-container">
+    <h2>Defect Analysis</h2>
+    <canvas id="defectChart"></canvas>
+   </div>
+   <div class="data-table-container">
+    <h2 style="margin: 0 0 1.5rem 0; font-size: 1.25rem;">Production Records</h2>
+    <div id="tableContent"></div>
+   </div>
+  </div>
+  <div class="modal" id="dataModal">
+   <div class="modal-content">
+    <div class="modal-header">
+     <h2>Add Production Data</h2><button class="close-btn" id="closeModal">×</button>
+    </div>
+    <form id="dataForm">
+     <div class="form-grid">
+      <div class="form-group"><label for="date">Date</label> <input type="date" id="date" required>
+      </div>
+      <div class="form-group"><label for="shift">Shift</label> <select id="shift" required> <option value="">Select Shift</option> <option value="A">A</option> <option value="B">B</option> <option value="C">C</option> </select>
+      </div>
+      <div class="form-group"><label for="partName">Part Name</label> <input type="text" id="partName" required>
+      </div>
+      <div class="form-group"><label for="colour">Colour</label> <input type="text" id="colour" required>
+      </div>
+      <div class="form-group"><label for="runHr">Run Hours</label> <input type="number" id="runHr" required>
+      </div>
+      <div class="form-group"><label for="targetProd">Target Production</label> <input type="number" id="targetProd">
+      </div>
+      <div class="form-group"><label for="totalLoading">Total Loading</label> <input type="number" id="totalLoading" required>
+      </div>
+      <div class="form-group"><label for="okQty">OK Quantity</label> <input type="number" id="okQty" required>
+      </div>
+      <div class="form-group"><label for="reworkQty">Rework Quantity</label> <input type="number" id="reworkQty" required>
+      </div>
+      <div class="form-group"><label for="buffing">Buffing</label> <input type="number" id="buffing" value="0">
+      </div>
+      <div class="form-group"><label for="finalScrap">Final Scrap</label> <input type="number" id="finalScrap" value="0">
+      </div>
+      <div class="form-group"><label for="dust">Dust</label> <input type="number" id="dust" value="0">
+      </div>
+      <div class="form-group"><label for="rd">RD</label> <input type="number" id="rd" value="0">
+      </div>
+      <div class="form-group"><label for="scratch">Scratch</label> <input type="number" id="scratch" value="0">
+      </div>
+      <div class="form-group"><label for="cissing">Cissing</label> <input type="number" id="cissing" value="0">
+      </div>
+      <div class="form-group"><label for="wm">WM</label> <input type="number" id="wm" value="0">
+      </div>
+     </div>
+     <div class="form-actions"><button type="button" class="btn" style="background: #cbd5e0; color: #1a202c;" id="cancelBtn">Cancel</button> <button type="submit" class="btn btn-primary" id="submitBtn"> <span id="submitText">Save Data</span> </button>
+     </div>
+    </form>
+   </div>
+  </div>
+  <div class="toast" id="toast"></div>
+  <script>
+    const defaultConfig = {
+      dashboard_title: "Production Dashboard",
+      company_name: "Manufacturing Analytics"
+    };
+
+    let allData = [];
+    let productionChart = null;
+    let defectChart = null;
+
+    const dataHandler = {
+      onDataChanged(data) {
+        allData = data;
+        updateDashboard();
+      }
+    };
+
+    async function onConfigChange(config) {
+      document.getElementById('dashboardTitle').textContent = config.dashboard_title || defaultConfig.dashboard_title;
+      document.getElementById('companyName').textContent = config.company_name || defaultConfig.company_name;
+    }
+
+    function mapToCapabilities(config) {
+      return {
+        recolorables: [],
+        borderables: [],
+        fontEditable: undefined,
+        fontSizeable: undefined
+      };
+    }
+
+    function mapToEditPanelValues(config) {
+      return new Map([
+        ['dashboard_title', config.dashboard_title || defaultConfig.dashboard_title],
+        ['company_name', config.company_name || defaultConfig.company_name]
+      ]);
+    }
+
+    async function init() {
+      if (window.dataSdk) {
+        const result = await window.dataSdk.init(dataHandler);
+        if (!result.isOk) {
+          console.error('Failed to initialize data SDK');
+        }
+      }
+
+      if (window.elementSdk) {
+        window.elementSdk.init({
+          defaultConfig,
+          onConfigChange,
+          mapToCapabilities,
+          mapToEditPanelValues
+        });
+      }
+
+      setupEventListeners();
+      updateDashboard();
+    }
+
+    function setupEventListeners() {
+      document.getElementById('addDataBtn').addEventListener('click', () => {
+        document.getElementById('dataModal').classList.add('active');
+        document.getElementById('date').valueAsDate = new Date();
+      });
+
+      document.getElementById('closeModal').addEventListener('click', closeModal);
+      document.getElementById('cancelBtn').addEventListener('click', closeModal);
+
+      document.getElementById('dataForm').addEventListener('submit', handleSubmit);
+
+      document.getElementById('downloadBtn').addEventListener('click', downloadExcel);
+    }
+
+    function closeModal() {
+      document.getElementById('dataModal').classList.remove('active');
+      document.getElementById('dataForm').reset();
+    }
+
+    async function handleSubmit(e) {
+      e.preventDefault();
+
+      if (allData.length >= 999) {
+        showToast('Maximum limit of 999 records reached. Please delete some records first.');
+        return;
+      }
+
+      const submitBtn = document.getElementById('submitBtn');
+      const submitText = document.getElementById('submitText');
+      
+      submitBtn.disabled = true;
+      submitText.innerHTML = '<span class="loading"></span>';
+
+      const formData = {
+        date: document.getElementById('date').value,
+        shift: document.getElementById('shift').value,
+        partName: document.getElementById('partName').value,
+        colour: document.getElementById('colour').value,
+        runHr: parseInt(document.getElementById('runHr').value),
+        targetProd: parseInt(document.getElementById('targetProd').value) || 0,
+        totalLoading: parseInt(document.getElementById('totalLoading').value),
+        okQty: parseInt(document.getElementById('okQty').value),
+        reworkQty: parseInt(document.getElementById('reworkQty').value),
+        reworkPercent: 0,
+        buffing: parseInt(document.getElementById('buffing').value) || 0,
+        finalScrap: parseInt(document.getElementById('finalScrap').value) || 0,
+        dust: parseInt(document.getElementById('dust').value) || 0,
+        rd: parseInt(document.getElementById('rd').value) || 0,
+        scratch: parseInt(document.getElementById('scratch').value) || 0,
+        cissing: parseInt(document.getElementById('cissing').value) || 0,
+        wm: parseInt(document.getElementById('wm').value) || 0,
+        dry: 0,
+        orangePeel: 0,
+        damage: 0,
+        uncovered: 0,
+        noLaq: 0,
+        touchUp: 0,
+        colourNG: 0,
+        paintCrack: 0,
+        ribBroken: 0,
+        screwMiss: 0,
+        glossNG: 0,
+        patchMark: 0,
+        mouldingIssue: 0,
+        waterShrinkage: 0,
+        spitting: 0,
+        scratchOther: 0,
+        others: 0
+      };
+
+      const total = formData.okQty + formData.reworkQty;
+      formData.reworkPercent = total > 0 ? parseFloat(((formData.reworkQty / total) * 100).toFixed(1)) : 0;
+
+      const result = await window.dataSdk.create(formData);
+
+      submitBtn.disabled = false;
+      submitText.textContent = 'Save Data';
+
+      if (result.isOk) {
+        showToast('Production data saved successfully!');
+        closeModal();
+      } else {
+        showToast('Failed to save data. Please try again.');
+      }
+    }
+
+    async function deleteRecord(record) {
+      const btn = event.target;
+      btn.disabled = true;
+      btn.textContent = 'Deleting...';
+
+      const result = await window.dataSdk.delete(record);
+
+      if (result.isOk) {
+        showToast('Record deleted successfully!');
+      } else {
+        showToast('Failed to delete record. Please try again.');
+        btn.disabled = false;
+        btn.textContent = 'Delete';
+      }
+    }
+
+    function updateDashboard() {
+      updateStats();
+      updateCharts();
+      updateTable();
+    }
+
+    function updateStats() {
+      const totalRecords = allData.length;
+      const totalOkQty = allData.reduce((sum, item) => sum + (item.okQty || 0), 0);
+      const totalRework = allData.reduce((sum, item) => sum + (item.reworkQty || 0), 0);
+      const avgRework = allData.length > 0 
+        ? (allData.reduce((sum, item) => sum + (item.reworkPercent || 0), 0) / allData.length).toFixed(1)
+        : 0;
+
+      document.getElementById('totalRecords').textContent = totalRecords;
+      document.getElementById('totalOkQty').textContent = totalOkQty.toLocaleString();
+      document.getElementById('totalRework').textContent = totalRework.toLocaleString();
+      document.getElementById('avgRework').textContent = avgRework + '%';
+    }
+
+    function updateCharts() {
+      const recentData = allData.slice(-10);
+      
+      const ctx1 = document.getElementById('productionChart');
+      if (productionChart) {
+        productionChart.destroy();
+      }
+      
+      productionChart = new Chart(ctx1, {
+        type: 'bar',
+        data: {
+          labels: recentData.map(d => d.date),
+          datasets: [
+            {
+              label: 'OK Quantity',
+              data: recentData.map(d => d.okQty),
+              backgroundColor: 'rgba(102, 126, 234, 0.8)',
+              borderColor: 'rgba(102, 126, 234, 1)',
+              borderWidth: 1
+            },
+            {
+              label: 'Rework Quantity',
+              data: recentData.map(d => d.reworkQty),
+              backgroundColor: 'rgba(252, 129, 129, 0.8)',
+              borderColor: 'rgba(252, 129, 129, 1)',
+              borderWidth: 1
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          scales: {
+            y: {
+              beginAtZero: true
+            }
+          }
+        }
+      });
+
+      const defectTypes = ['dust', 'rd', 'scratch', 'cissing', 'wm'];
+      const defectCounts = defectTypes.map(type => 
+        allData.reduce((sum, item) => sum + (item[type] || 0), 0)
+      );
+
+      const ctx2 = document.getElementById('defectChart');
+      if (defectChart) {
+        defectChart.destroy();
+      }
+      
+      defectChart = new Chart(ctx2, {
+        type: 'pie',
+        data: {
+          labels: ['Dust', 'RD', 'Scratch', 'Cissing', 'WM'],
+          datasets: [{
+            data: defectCounts,
+            backgroundColor: [
+              'rgba(102, 126, 234, 0.8)',
+              'rgba(118, 75, 162, 0.8)',
+              'rgba(72, 187, 120, 0.8)',
+              'rgba(237, 137, 54, 0.8)',
+              'rgba(252, 129, 129, 0.8)'
+            ]
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true
+        }
+      });
+    }
+
+    function updateTable() {
+      const tableContent = document.getElementById('tableContent');
+
+      if (allData.length === 0) {
+        tableContent.innerHTML = `
+          <div class="empty-state">
+            <h3>No Data Yet</h3>
+            <p>Click "Add Production Data" to start tracking your production metrics</p>
+          </div>
+        `;
+        return;
+      }
+
+      const sortedData = [...allData].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+      let html = `
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Shift</th>
+              <th>Part Name</th>
+              <th>Colour</th>
+              <th>Run Hr</th>
+              <th>Total Loading</th>
+              <th>OK Qty</th>
+              <th>Rework Qty</th>
+              <th>Rework %</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      sortedData.forEach(record => {
+        html += `
+          <tr>
+            <td>${record.date}</td>
+            <td>${record.shift}</td>
+            <td>${record.partName}</td>
+            <td>${record.colour}</td>
+            <td>${record.runHr}</td>
+            <td>${record.totalLoading}</td>
+            <td>${record.okQty}</td>
+            <td>${record.reworkQty}</td>
+            <td>${record.reworkPercent}%</td>
+            <td>
+              <button class="delete-btn" onclick="deleteRecord(${JSON.stringify(record).replace(/"/g, '&quot;')})">
+                Delete
+              </button>
+            </td>
+          </tr>
+        `;
+      });
+
+      html += `
+          </tbody>
+        </table>
+      `;
+
+      tableContent.innerHTML = html;
+    }
+
+    function downloadExcel() {
+      if (allData.length === 0) {
+        showToast('No data to download');
+        return;
+      }
+
+      const exportData = allData.map((record, index) => ({
+        'S.NO': index + 1,
+        'DATE': record.date,
+        'SHIFT': record.shift,
+        'Part Name': record.partName,
+        'Colour': record.colour,
+        'Run Hr': record.runHr,
+        'Target Prod.': record.targetProd,
+        'Total loading': record.totalLoading,
+        'OK Qty': record.okQty,
+        'Rework qty': record.reworkQty,
+        'Rework %': record.reworkPercent + '%',
+        'Buffing': record.buffing,
+        'Final Scrap': record.finalScrap,
+        'Dust': record.dust,
+        'RD': record.rd,
+        'Scratch': record.scratch,
+        'Cissing': record.cissing,
+        'WM': record.wm
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Production Data');
+      
+      const fileName = `production_data_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+      
+      showToast('Excel file downloaded successfully!');
+    }
+
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.classList.add('show');
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 3000);
+    }
+
+    window.deleteRecord = deleteRecord;
+
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9be4759426193e2e',t:'MTc2ODQ3MDUyNy4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
